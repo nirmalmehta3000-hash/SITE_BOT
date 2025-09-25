@@ -54,15 +54,15 @@ Expert Answer:
 
 def create_vector_db():
     if not os.path.exists(DATASET_PATH):
-        st.error(f"Dataset not found at {{DATASET_PATH}}. Please upload it.")
+        st.error(f"Dataset not found at {DATASET_PATH}. Please upload it.")
         return None # Return None to indicate failure
     try:
         df = pd.read_excel(DATASET_PATH) # Read Excel file instead of CSV
     except Exception as e:
-        st.error(f"Error reading dataset file: {{e}}")
+        st.error(f"Error reading dataset file: {e}")
         return None
 
-    documents = [Document(page_content=f"Q: {{row['prompt']}}\nA: {{row['response']}}") for _, row in df.iterrows()]
+    documents = [Document(page_content=f"Q: {row['prompt']}\nA: {row['response']}") for _, row in df.iterrows()]
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     texts = text_splitter.split_documents(documents)
     embeddings = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -109,7 +109,7 @@ def determine_llm(question: str):
         return "grok"
     return "gemini"
 
-def save_chat_entry_to_csv(timestamp, name, email, sender, message):
+def save_chat_entry_to_csv(timestamp, name, email, mobile, sender, message):
     """Saves a single chat entry to a CSV file."""
     if not os.path.exists(CHAT_HISTORY_DIR):
         os.makedirs(CHAT_HISTORY_DIR)
@@ -120,8 +120,8 @@ def save_chat_entry_to_csv(timestamp, name, email, sender, message):
     with open(CHAT_HISTORY_FILE, mode='a', newline='') as file:
         writer = csv.writer(file)
         if not file_exists:
-            writer.writerow(['Timestamp', 'Name', 'Email', 'Sender', 'Message'])
-        writer.writerow([timestamp, name, email, sender, message])
+            writer.writerow(['Timestamp', 'Name', 'Email', 'Mobile', 'Sender', 'Message'])
+        writer.writerow([timestamp, name, email, mobile, sender, message])
     st.write("Chat entry saved to CSV.")
 
 
@@ -143,6 +143,8 @@ def run_app():
         st.session_state.user_name = ""
     if "user_email" not in st.session_state:
         st.session_state.user_email = ""
+    if "user_mobile" not in st.session_state:
+        st.session_state.user_mobile = ""
     if "session_timestamp" not in st.session_state:
         st.session_state.session_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -150,19 +152,21 @@ def run_app():
     # Collect user info if not already collected
     if not st.session_state.user_info_collected:
         with st.form("user_info_form"):
-            st.write("Please provide your name and email to start the chat.")
+            st.write("Please provide your details to start the chat.")
             name = st.text_input("Name")
             email = st.text_input("Email")
+            mobile = st.text_input("Mobile Number")
             submit_button = st.form_submit_button("Start Chat")
 
             if submit_button:
                 st.session_state.user_name = name
                 st.session_state.user_email = email
+                st.session_state.user_mobile = mobile
                 st.session_state.user_info_collected = True
                 st.rerun() # Rerun to hide the input fields
 
     if st.session_state.user_info_collected:
-        st.write(f"Welcome, {{st.session_state.user_name}}!")
+        st.write(f"Welcome, {st.session_state.user_name}!")
         question = st.chat_input("Ask your career or customer service question here:")
 
         if question:
@@ -181,8 +185,8 @@ def run_app():
                             # system_instructions=SYSTEM_INSTRUCTION # Removed as it caused a warning
                         )
                     except Exception as e:
-                        st.error(f"Error initializing Gemini model: {{e}}.")
-                        print(f"Error initializing Gemini model: {{e}}") # Add logging
+                        st.error(f"Error initializing Gemini model: {e}.")
+                        print(f"Error initializing Gemini model: {e}") # Add logging
             elif llm_choice == "grok" and ChatXAI and GROK_API_KEY:
                  try:
                     llm = ChatXAI(
@@ -192,8 +196,8 @@ def run_app():
                         # system_instructions=SYSTEM_INSTRUCTION # Removed as it caused a warning
                     )
                  except Exception as e:
-                     st.error(f"Error initializing Grok model: {{e}}. Falling back to Gemini.")
-                     print(f"Error initializing Grok model: {{e}}. Falling back to Gemini.") # Add logging
+                     st.error(f"Error initializing Grok model: {e}. Falling back to Gemini.")
+                     print(f"Error initializing Grok model: {e}. Falling back to Gemini.") # Add logging
                      llm_choice = "gemini" # Fallback to Gemini
                      if not GOOGLE_API_KEY:
                           st.error("Google API Key not found for fallback. Please set the GOOGLE_API_KEY environment variable.")
@@ -206,8 +210,8 @@ def run_app():
                                 # system_instructions=SYSTEM_INSTRUCTION # Removed as it caused a warning
                             )
                          except Exception as gemini_e:
-                             st.error(f"Error initializing fallback Gemini model: {{gemini_e}}.")
-                             print(f"Error initializing fallback Gemini model: {{gemini_e}}") # Add logging
+                             st.error(f"Error initializing fallback Gemini model: {gemini_e}.")
+                             print(f"Error initializing fallback Gemini model: {gemini_e}") # Add logging
                              llm = None # Ensure llm is None if fallback also fails
             else: # Fallback to Gemini if Grok is chosen but ChatXAI is not available or API key is missing
                 if llm_choice == "grok":
@@ -224,22 +228,22 @@ def run_app():
                             # system_instructions=SYSTEM_INSTRUCTION # Removed as it caused a warning
                         )
                     except Exception as e:
-                        st.error(f"Error initializing fallback Gemini model: {{e}}.")
-                        print(f"Error initializing fallback Gemini model: {{e}}") # Add logging
+                        st.error(f"Error initializing fallback Gemini model: {e}.")
+                        print(f"Error initializing fallback Gemini model: {e}") # Add logging
                         llm = None # Ensure llm is None if fallback also fails
 
 
             if llm: # Only proceed if an LLM was successfully initialized (or fell back to Gemini)
                 qa_chain = get_qa_chain(llm)
                 if qa_chain:
-                    with st.spinner(f"Using {{llm_choice.title()}} model to answer..."): 
+                    with st.spinner(f"Using {llm_choice.title()} model to answer..."): 
                         try:
                             response = qa_chain.invoke({"query": question})
                             answer = response.get("result", "Could not get an answer from the model.")
                         except Exception as e:
-                            answer = f"An error occurred while processing your request: {{e}}"
+                            answer = f"An error occurred while processing your request: {e}"
                             st.error(answer)
-                            print(f"Error during QA chain invocation: {{e}}") # Add logging
+                            print(f"Error during QA chain invocation: {e}") # Add logging
                 else:
                      answer = "Sorry, I could not load the knowledge base to answer your question."
 
@@ -251,6 +255,7 @@ def run_app():
                     st.session_state.session_timestamp,
                     st.session_state.user_name,
                     st.session_state.user_email,
+                    st.session_state.user_mobile,
                     "User",
                     question
                 )
@@ -258,6 +263,7 @@ def run_app():
                     st.session_state.session_timestamp,
                     st.session_state.user_name,
                     st.session_state.user_email,
+                    st.session_state.user_mobile,
                     "Assistant",
                     answer
                 )
@@ -272,6 +278,7 @@ def run_app():
                      st.session_state.session_timestamp,
                      st.session_state.user_name,
                      st.session_state.user_email,
+                     st.session_state.user_mobile,
                      "User",
                      question
                  )
