@@ -63,6 +63,7 @@ def create_chat_history_table():
         name VARCHAR(255),
         session_timestamp DATETIME,
         email VARCHAR(255),
+        mobile VARCHAR(20),
         user_question TEXT,
         assistant_answer LONGTEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -87,7 +88,7 @@ def create_chat_history_table():
         conn.close()
 
 
-def save_chat_entry_to_db(session_timestamp, name, email, user_question, assistant_answer):
+def save_chat_entry_to_db(session_timestamp, name, email, mobile, user_question, assistant_answer):
     """
     Insert a chat entry. Returns True if inserted successfully, False otherwise.
     session_timestamp can be a datetime or a string in 'YYYY-MM-DD HH:MM:SS' format.
@@ -97,8 +98,8 @@ def save_chat_entry_to_db(session_timestamp, name, email, user_question, assista
         return False
 
     insert_sql = """
-    INSERT INTO chat_history (session_timestamp, name, email, user_question, assistant_answer)
-    VALUES (%s, %s, %s, %s, %s)
+    INSERT INTO chat_history (session_timestamp, name, email, mobile, user_question, assistant_answer)
+    VALUES (%s, %s, %s, %s, %s, %s)
     """
     cur = None
     try:
@@ -115,7 +116,7 @@ def save_chat_entry_to_db(session_timestamp, name, email, user_question, assista
             ts = datetime.now()
 
         cur = conn.cursor()
-        cur.execute(insert_sql, (ts, name, email, user_question, assistant_answer))
+        cur.execute(insert_sql, (ts, name, email, mobile, user_question, assistant_answer))
 
         if cur.rowcount != 1:
             logger.warning("Insert affected %s rows", cur.rowcount)
