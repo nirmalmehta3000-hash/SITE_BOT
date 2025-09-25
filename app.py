@@ -3,6 +3,7 @@ import os
 import pandas as pd
 from datetime import datetime
 import csv # Import the csv module
+from db_utils import save_chat_entry_to_db, create_chat_history_table
 
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -130,6 +131,9 @@ def run_app():
     st.title("Gerryson Mehta's Chatbot 🤖")
     st.write("Powered by Google Gemini and Grok AI")
 
+    # Initialize database table
+    create_chat_history_table()
+
     # Remove the button to create knowledgebase
     # if st.button("Create Knowledgebase from CSV"):
     #     with st.spinner("Building knowledgebase..."):
@@ -250,21 +254,13 @@ def run_app():
                 st.session_state.chat_history.append(("user", question))
                 st.session_state.chat_history.append(("assistant", answer))
 
-                # Save chat history to CSV
-                save_chat_entry_to_csv(
+                # Save chat history to MySQL database
+                save_chat_entry_to_db(
                     st.session_state.session_timestamp,
                     st.session_state.user_name,
                     st.session_state.user_email,
                     st.session_state.user_mobile,
-                    "User",
-                    question
-                )
-                save_chat_entry_to_csv(
-                    st.session_state.session_timestamp,
-                    st.session_state.user_name,
-                    st.session_state.user_email,
-                    st.session_state.user_mobile,
-                    "Assistant",
+                    question,
                     answer
                 )
 
@@ -274,13 +270,13 @@ def run_app():
                  st.session_state.chat_history.append(("assistant", "Sorry, I encountered an issue with the language model and cannot answer your question at this time. Please ensure your API keys are correctly set."))
 
                  # Attempt to save the user query even if LLM failed
-                 save_chat_entry_to_csv(
+                 save_chat_entry_to_db(
                      st.session_state.session_timestamp,
                      st.session_state.user_name,
                      st.session_state.user_email,
                      st.session_state.user_mobile,
-                     "User",
-                     question
+                     question,
+                     "Sorry, I encountered an issue with the language model and cannot answer your question at this time. Please ensure your API keys are correctly set."
                  )
 
 
