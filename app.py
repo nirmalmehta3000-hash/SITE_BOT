@@ -1,8 +1,19 @@
 from dotenv import load_dotenv
 import os
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file with UTF-8 encoding
+# For Railway deployment, environment variables are provided directly
+try:
+    # Only try to load .env if it exists and is readable
+    if os.path.exists('.env'):
+        load_dotenv(encoding='utf-8')
+    else:
+        print("No .env file found, using system environment variables (Railway deployment)")
+except Exception as e:
+    # If .env file has encoding issues, continue without it
+    # Railway will provide environment variables directly
+    print(f"Warning: Could not load .env file: {e}")
+    print("Continuing with system environment variables...")
 
 import streamlit as st
 import pandas as pd
@@ -40,7 +51,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 VECTOR_DB_PATH = "vectorstore.faiss"
-DATASET_PATH = "dataset.xlsx"
+DATASET_PATH = "dataset.csv"
 
 # System instruction
 SYSTEM_INSTRUCTION = (
@@ -102,14 +113,18 @@ def validate_name(name):
 # VECTORSTORE / QA
 # ============================================
 def create_vector_db():
-    """Create vector database from Excel dataset"""
+    """Create vector database from CSV dataset (UTF-8 compatible)"""
     if not os.path.exists(DATASET_PATH):
         st.error(f"Dataset not found. Please upload {DATASET_PATH} to your project.")
-        st.info("Create a dataset.xlsx file with 'prompt' and 'response' columns.")
+        st.info("Create a dataset.csv file with 'prompt' and 'response' columns.")
         return None
         
     try:
-        df = pd.read_excel(DATASET_PATH)
+        # Try CSV first (better UTF-8 support), fallback to Excel
+        if DATASET_PATH.endswith('.csv'):
+            df = pd.read_csv(DATASET_PATH, encoding='utf-8')
+        else:
+            df = pd.read_excel(DATASET_PATH)
         
         if 'prompt' not in df.columns or 'response' not in df.columns:
             st.error("Dataset must have 'prompt' and 'response' columns.")
