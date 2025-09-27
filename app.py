@@ -37,6 +37,7 @@ except ImportError as e:
 # API Keys
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 VECTOR_DB_PATH = "vectorstore.faiss"
 DATASET_PATH = "dataset.xlsx"
@@ -176,6 +177,15 @@ def get_available_models():
             ("gpt-3.5-turbo", "OpenAI GPT-3.5 Turbo (Economical)")
         ])
     
+    if OPENROUTER_API_KEY:
+        models.extend([
+            ("anthropic/claude-3.5-sonnet", "Claude 3.5 Sonnet (OpenRouter)"),
+            ("anthropic/claude-3-haiku", "Claude 3 Haiku (OpenRouter)"),
+            ("meta-llama/llama-3.1-405b-instruct", "Llama 3.1 405B (OpenRouter)"),
+            ("openai/gpt-4o", "GPT-4o (OpenRouter)"),
+            ("google/gemini-pro-1.5", "Gemini Pro 1.5 (OpenRouter)")
+        ])
+    
     if not models:
         return [("none", "No API keys configured")]
     
@@ -184,7 +194,7 @@ def get_available_models():
 def create_llm(model_name):
     """Create LLM instance based on model choice"""
     try:
-        if model_name.startswith("gemini"):
+        if model_name.startswith("gemini") and "/" not in model_name:
             if not GOOGLE_API_KEY:
                 st.error("Google API Key required for Gemini models")
                 return None
@@ -195,7 +205,7 @@ def create_llm(model_name):
                 google_api_key=GOOGLE_API_KEY,
             )
             
-        elif model_name.startswith("gpt"):
+        elif model_name.startswith("gpt") and "/" not in model_name:
             if not OPENAI_API_KEY:
                 st.error("OpenAI API Key required for GPT models")
                 return None
@@ -204,6 +214,22 @@ def create_llm(model_name):
                 model=model_name,
                 temperature=0.3,
                 openai_api_key=OPENAI_API_KEY,
+            )
+            
+        elif "/" in model_name:  # OpenRouter models have format "provider/model"
+            if not OPENROUTER_API_KEY:
+                st.error("OpenRouter API Key required for OpenRouter models")
+                return None
+                
+            return ChatOpenAI(
+                model=model_name,
+                temperature=0.3,
+                openai_api_key=OPENROUTER_API_KEY,
+                openai_api_base="https://openrouter.ai/api/v1",
+                default_headers={
+                    "HTTP-Referer": "https://gerrysonmehta.com",
+                    "X-Title": "Gerryson Mehta AI Assistant",
+                },
             )
         else:
             st.error(f"Unknown model: {model_name}")
@@ -373,7 +399,7 @@ def chat_interface():
             key="model_selector"
         )
     else:
-        st.error("⚠️ No API keys configured. Please add GOOGLE_API_KEY or OPENAI_API_KEY to your .env file")
+        st.error("⚠️ No API keys configured. Please add GOOGLE_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY to your .env file")
         return
     
     # Initialize QA chain with selected model
