@@ -1,194 +1,256 @@
-# db_utils.py
 import os
-import logging
-from datetime import datetime
 import mysql.connector
 from mysql.connector import Error
+from datetime import datetime
+import logging
 
-# Optional: avoid importing streamlit into a utility module to keep separation of concerns.
-# If you prefer to show Streamlit errors directly, uncomment the next two lines and use st.error(...)
-# import streamlit as st
-
+# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-MYSQL_HOST = os.environ.get("MYSQLHOST")
-MYSQL_PORT = int(os.environ.get("MYSQLPORT", 3306))
-MYSQL_DATABASE = os.environ.get("MYSQLDATABASE")
-MYSQL_USER = os.environ.get("MYSQLUSER")
-MYSQL_PASSWORD = os.environ.get("MYSQLPASSWORD")
-
-
-def _env_ok():
-    return all([MYSQL_HOST, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD])
-
-
-def get_db_connection():
-    """
-    Return a new mysql.connector connection (caller must close it).
-    Returns None if credentials missing or connection fails.
-    """
-    if not _env_ok():
-        logger.warning("MySQL env vars missing. Set MYSQL_HOST, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD.")
-        return None
-
-    try:
-        conn = mysql.connector.connect(
-            host=MYSQL_HOST,
-            port=MYSQL_PORT,
-            user=MYSQL_USER,
-            password=MYSQL_PASSWORD,
-            database=MYSQL_DATABASE,
-            charset="utf8mb4",
-            use_unicode=True,
-            autocommit=False,  # we'll commit explicitly
-        )
-        return conn
-    except Error as err:
-        logger.exception("DB connection error: %s", err)
-        return None
-
-
-def create_chat_history_table():
-    """
-    Ensure chat_history table exists. Returns True on success, False otherwise.
-    """
-    conn = get_db_connection()
-    if not conn:
-        return False
-
-    create_sql = """
-    CREATE TABLE IF NOT EXISTS chat_history (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255),
-        session_timestamp DATETIME,
-        email VARCHAR(255),
-        mobile VARCHAR(20),
-        user_question TEXT,
-        assistant_answer LONGTEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    """
-    cur = None
-    try:
-        cur = conn.cursor()
-        cur.execute(create_sql)
-        conn.commit()
-        return True
-    except Error as err:
-        logger.exception("Error creating chat_history table: %s", err)
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        return False
-    finally:
-        if cur:
-            cur.close()
-        conn.close()
-
-
-def save_chat_entry_to_db(session_timestamp, name, email, mobile, user_question, assistant_answer):
-    """
-    Insert a chat entry. Returns True if inserted successfully, False otherwise.
-    session_timestamp can be a datetime or a string in 'YYYY-MM-DD HH:MM:SS' format.
-    """
-    conn = get_db_connection()
-    if not conn:
-        return False
-
-    insert_sql = """
-    INSERT INTO chat_history (session_timestamp, name, email, mobile, user_question, assistant_answer)
-    VALUES (%s, %s, %s, %s, %s, %s)
-    """
-    cur = None
-    try:
-        # Normalize timestamp
-        if isinstance(session_timestamp, str):
-            try:
-                ts = datetime.strptime(session_timestamp, "%Y-%m-%d %H:%M:%S")
-            except Exception:
-                # fallback to now
-                ts = datetime.now()
-        elif isinstance(session_timestamp, datetime):
-            ts = session_timestamp
-        else:
-            ts = datetime.now()
-
-        cur = conn.cursor()
-        cur.execute(insert_sql, (ts, name, email, mobile, user_question, assistant_answer))
-
-        if cur.rowcount != 1:
-            logger.warning("Insert affected %s rows", cur.rowcount)
-
-        conn.commit()
-        return True
-    except Error as err:
-        logger.exception("Error inserting chat entry: %s", err)
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        return False
-    finally:
-        if cur:
-            cur.close()
-        conn.close()
-
-
-def test_connection():
-    """
-    Handy helper to test DB connectivity. Returns True if SELECT 1 works.
-    """
-    conn = get_db_connection()
-    if not conn:
-        return False
-    cur = None
-    try:
-        cur = conn.cursor()
-        cur.execute("SELECT 1")
-        result = cur.fetchone()
-        return result is not None
-    except Exception as e:
-        logger.exception("DB test failed: %s", e)
-        return False
-    finally:
-        if cur:
-            cur.close()
-        conn.close()
-
-
-def initialize_all_tables():
-    """Initialize all required tables"""
-    return create_chat_history_table()
-
-
-def create_or_get_user(name, email, mobile):
-    """Create or get user - simplified version"""
+# Railway MySQL configuration
+def get_db_config():
+    """Get database configuration from environment variables"""
     return {
-        'user_id': 1,
-        'full_name': name,
-        'email': email,
-        'mobile': mobile,
-        'is_new': True
+        'host': os.environ.get('MYSQLHOST'),
+        'port': int(os.environ.get('MYSQLPORT', 3306)),
+        'database': os.environ.get('MYSQLDATABASE'),
+        'user': os.environ.get('MYSQLUSER'),
+        'password': os.environ.get('MYSQLPASSWORD'),
+        'charset': 'utf8mb4',
+        'use_unicode': True,
+        'autocommit': True
     }
 
+def get_db_connection():
+    """Create and return database connection"""
+    try:
+        config = get_db_config()
+        
+        # Check if all required config is present
+        required_keys = ['host', 'database', 'user', 'password']
+        missing_keys = [key for key in required_keys if not config.get(key)]
+        
+        if missing_keys:
+            logger.error(f"Missing database configuration: {missing_keys}")
+            return None
+        
+        connection = mysql.connector.connect(**config)
+        
+        if connection.is_connected():
+            return connection
+        else:
+            logger.error("Failed to establish database connection")
+            return None
+            
+    except Error as e:
+        logger.error(f"Database connection error: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error connecting to database: {e}")
+        return None
 
-def create_user_session(user_id):
-    """Create user session - simplified version"""
-    return str(user_id)
+def create_chat_table():
+    """Create the chat history table"""
+    connection = get_db_connection()
+    if not connection:
+        return False
+    
+    try:
+        cursor = connection.cursor()
+        
+        create_table_query = """
+        CREATE TABLE IF NOT EXISTS chat_history (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_name VARCHAR(255) NOT NULL,
+            user_email VARCHAR(255) NOT NULL,
+            user_mobile VARCHAR(20) NOT NULL,
+            user_question TEXT NOT NULL,
+            assistant_answer LONGTEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_email (user_email),
+            INDEX idx_created_at (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        """
+        
+        cursor.execute(create_table_query)
+        logger.info("Chat history table created successfully")
+        return True
+        
+    except Error as e:
+        logger.error(f"Error creating table: {e}")
+        return False
+    finally:
+        if connection and connection.is_connected():
+            cursor.close()
+            connection.close()
 
+def test_database_connection():
+    """Test database connection"""
+    connection = get_db_connection()
+    if not connection:
+        logger.error("Database connection test failed")
+        return False
+    
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT 1")
+        result = cursor.fetchone()
+        logger.info("Database connection test successful")
+        return result is not None
+        
+    except Error as e:
+        logger.error(f"Database test error: {e}")
+        return False
+    finally:
+        if connection and connection.is_connected():
+            cursor.close()
+            connection.close()
 
-def get_user_chat_history(user_id, limit=10):
-    """Get user chat history - simplified version"""
-    return []
+def initialize_database():
+    """Initialize database with required tables"""
+    logger.info("Initializing database...")
+    
+    # Test connection first
+    if not test_database_connection():
+        logger.error("Database initialization failed - no connection")
+        return False
+    
+    # Create tables
+    if create_chat_table():
+        logger.info("Database initialized successfully")
+        return True
+    else:
+        logger.error("Database initialization failed - table creation error")
+        return False
 
+def save_chat_to_database(user_name, user_email, user_mobile, question, answer):
+    """Save chat entry to database"""
+    connection = get_db_connection()
+    if not connection:
+        logger.error("Cannot save chat - no database connection")
+        return False
+    
+    try:
+        cursor = connection.cursor()
+        
+        insert_query = """
+        INSERT INTO chat_history (user_name, user_email, user_mobile, user_question, assistant_answer)
+        VALUES (%s, %s, %s, %s, %s)
+        """
+        
+        cursor.execute(insert_query, (user_name, user_email, user_mobile, question, answer))
+        
+        if cursor.rowcount == 1:
+            logger.info(f"Chat saved successfully for {user_email}")
+            return True
+        else:
+            logger.warning(f"Unexpected rowcount: {cursor.rowcount}")
+            return False
+            
+    except Error as e:
+        logger.error(f"Error saving chat: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error saving chat: {e}")
+        return False
+    finally:
+        if connection and connection.is_connected():
+            cursor.close()
+            connection.close()
 
-def get_user_stats(user_id):
-    """Get user stats - simplified version"""
-    return {'total_chats': 0, 'first_chat': None}
+def get_user_chat_history(user_email, limit=10):
+    """Get chat history for a user"""
+    connection = get_db_connection()
+    if not connection:
+        return []
+    
+    try:
+        cursor = connection.cursor(dictionary=True)
+        
+        query = """
+        SELECT user_question, assistant_answer, created_at
+        FROM chat_history
+        WHERE user_email = %s
+        ORDER BY created_at DESC
+        LIMIT %s
+        """
+        
+        cursor.execute(query, (user_email, limit))
+        results = cursor.fetchall()
+        
+        return results
+        
+    except Error as e:
+        logger.error(f"Error fetching chat history: {e}")
+        return []
+    finally:
+        if connection and connection.is_connected():
+            cursor.close()
+            connection.close()
 
+def get_total_chats():
+    """Get total number of chats in database"""
+    connection = get_db_connection()
+    if not connection:
+        return 0
+    
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT COUNT(*) FROM chat_history")
+        result = cursor.fetchone()
+        return result[0] if result else 0
+        
+    except Error as e:
+        logger.error(f"Error getting total chats: {e}")
+        return 0
+    finally:
+        if connection and connection.is_connected():
+            cursor.close()
+            connection.close()
 
-def get_database_info():
-    """Get database info - simplified version"""
-    return {'database': 'chat_db', 'total_tables': 1, 'tables': {'chat_history': 0}}
+def get_unique_users():
+    """Get total number of unique users"""
+    connection = get_db_connection()
+    if not connection:
+        return 0
+    
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT COUNT(DISTINCT user_email) FROM chat_history")
+        result = cursor.fetchone()
+        return result[0] if result else 0
+        
+    except Error as e:
+        logger.error(f"Error getting unique users: {e}")
+        return 0
+    finally:
+        if connection and connection.is_connected():
+            cursor.close()
+            connection.close()
+
+# Debug function for Railway deployment
+def debug_environment():
+    """Debug environment variables for Railway deployment"""
+    env_vars = ['MYSQLHOST', 'MYSQLPORT', 'MYSQLDATABASE', 'MYSQLUSER', 'MYSQLPASSWORD']
+    
+    print("=== Railway Database Environment Debug ===")
+    for var in env_vars:
+        value = os.environ.get(var)
+        if value:
+            if var == 'MYSQLPASSWORD':
+                print(f"{var}: {'*' * len(value)}")
+            else:
+                print(f"{var}: {value}")
+        else:
+            print(f"{var}: NOT SET")
+    
+    print("=== Connection Test ===")
+    if test_database_connection():
+        print("✅ Database connection successful")
+    else:
+        print("❌ Database connection failed")
+
+if __name__ == "__main__":
+    # Run debug when called directly
+    debug_environment()
