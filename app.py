@@ -1,3 +1,13 @@
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Rest of your imports...
+import streamlit as st
+import pandas as pd
+
 import streamlit as st
 import os
 import pandas as pd
