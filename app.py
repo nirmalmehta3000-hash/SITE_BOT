@@ -169,7 +169,7 @@ def get_qa_chain():
         
     try:
         llm = GoogleGenerativeAI(
-            model="gemini-1.5-pro-latest",
+            model="gemini-1.5-pro",
             temperature=0.3,
             google_api_key=GOOGLE_API_KEY,
         )
