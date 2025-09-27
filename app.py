@@ -15,6 +15,7 @@ from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain_google_genai import GoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.docstore.document import Document
 from langchain_core.prompts import PromptTemplate
@@ -35,6 +36,7 @@ except ImportError as e:
 
 # API Keys
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 VECTOR_DB_PATH = "vectorstore.faiss"
 DATASET_PATH = "dataset.xlsx"
@@ -157,23 +159,69 @@ def get_vectorstore():
         st.error(f"Error loading vectorstore: {e}")
         return None
 
-def get_qa_chain():
-    """Create QA chain"""
-    if not GOOGLE_API_KEY:
-        st.error("Google API Key not found. Please set GOOGLE_API_KEY in your environment.")
+def get_available_models():
+    """Get list of available AI models"""
+    models = []
+    
+    if GOOGLE_API_KEY:
+        models.extend([
+            ("gemini-1.5-pro", "Google Gemini Pro (Recommended)"),
+            ("gemini-1.5-flash", "Google Gemini Flash (Faster)")
+        ])
+    
+    if OPENAI_API_KEY:
+        models.extend([
+            ("gpt-4o", "OpenAI GPT-4o (Latest)"),
+            ("gpt-4o-mini", "OpenAI GPT-4o Mini (Faster)"),
+            ("gpt-3.5-turbo", "OpenAI GPT-3.5 Turbo (Economical)")
+        ])
+    
+    if not models:
+        return [("none", "No API keys configured")]
+    
+    return models
+
+def create_llm(model_name):
+    """Create LLM instance based on model choice"""
+    try:
+        if model_name.startswith("gemini"):
+            if not GOOGLE_API_KEY:
+                st.error("Google API Key required for Gemini models")
+                return None
+                
+            return GoogleGenerativeAI(
+                model=model_name,
+                temperature=0.3,
+                google_api_key=GOOGLE_API_KEY,
+            )
+            
+        elif model_name.startswith("gpt"):
+            if not OPENAI_API_KEY:
+                st.error("OpenAI API Key required for GPT models")
+                return None
+                
+            return ChatOpenAI(
+                model=model_name,
+                temperature=0.3,
+                openai_api_key=OPENAI_API_KEY,
+            )
+        else:
+            st.error(f"Unknown model: {model_name}")
+            return None
+            
+    except Exception as e:
+        st.error(f"Error creating {model_name}: {e}")
         return None
-        
+def get_qa_chain(model_name="gemini-1.5-pro"):
+    """Create QA chain with specified model"""
     vectorstore = get_vectorstore()
     if vectorstore is None:
         return None
         
+    llm = create_llm(model_name)
+    if llm is None:
+        return None
     try:
-        llm = GoogleGenerativeAI(
-            model="gemini-1.5-pro",
-            temperature=0.3,
-            google_api_key=GOOGLE_API_KEY,
-        )
-        
         retriever = vectorstore.as_retriever(
             search_type="similarity", 
             search_kwargs={"k": 3}
@@ -313,10 +361,26 @@ def chat_interface():
     st.title("🤖 Gerryson Mehta's AI Assistant")
     st.markdown(f"*Welcome back, {user_data['name']}! How can I help you today?*")
     
-    # Initialize QA chain
-    if 'qa_chain' not in st.session_state:
-        with st.spinner("Loading AI assistant..."):
-            st.session_state.qa_chain = get_qa_chain()
+    # Model selection
+    available_models = get_available_models()
+    
+    if available_models[0][0] != "none":
+        selected_model = st.selectbox(
+            "🧠 Choose AI Model:",
+            options=[model[0] for model in available_models],
+            format_func=lambda x: next(model[1] for model in available_models if model[0] == x),
+            index=0,
+            key="model_selector"
+        )
+    else:
+        st.error("⚠️ No API keys configured. Please add GOOGLE_API_KEY or OPENAI_API_KEY to your .env file")
+        return
+    
+    # Initialize QA chain with selected model
+    if 'qa_chain' not in st.session_state or st.session_state.get('current_model') != selected_model:
+        with st.spinner(f"Loading {selected_model}..."):
+            st.session_state.qa_chain = get_qa_chain(selected_model)
+            st.session_state.current_model = selected_model
     
     # Chat input
     if prompt := st.chat_input("Ask me anything about your career, projects, or technical questions..."):
@@ -325,14 +389,14 @@ def chat_interface():
         
         # Generate response
         if st.session_state.qa_chain:
-            with st.spinner("Thinking..."):
+            with st.spinner(f"🧠 {selected_model} is thinking..."):
                 try:
                     response = st.session_state.qa_chain.invoke({"query": prompt})
                     answer = response.get("result", "I couldn't generate a proper response.")
                 except Exception as e:
                     answer = f"Sorry, I encountered an error: {str(e)}"
         else:
-            answer = "AI assistant is not available. Please check your configuration."
+            answer = "AI assistant is not available. Please check your API configuration."
         
         # Add assistant response
         st.session_state.chat_history.append({"role": "assistant", "content": answer})
