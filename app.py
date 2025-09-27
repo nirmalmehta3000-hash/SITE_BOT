@@ -286,7 +286,7 @@ def initialize_llm(llm_choice):
                 return None, llm_choice
                 
             return GoogleGenerativeAI(
-                model="gemini-1.5-pro",
+                model="gemini-1.5-pro-latest",
                 temperature=0.3,
                 google_api_key=GOOGLE_API_KEY,
             ), llm_choice
@@ -305,7 +305,7 @@ def initialize_llm(llm_choice):
         if llm_choice != "gemini" and GOOGLE_API_KEY:
             try:
                 return GoogleGenerativeAI(
-                    model="gemini-1.5-pro",
+                    model="gemini-1.5-pro-latest",
                     temperature=0.3,
                     google_api_key=GOOGLE_API_KEY,
                 ), "gemini"
