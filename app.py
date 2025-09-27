@@ -183,7 +183,7 @@ def run_app():
                 else:
                     try:
                         llm = GoogleGenerativeAI(
-                            model="gemini-1.5-flash-latest",
+                            model="gemini-1.5-flash",
                             temperature=0.3,
                             google_api_key=GOOGLE_API_KEY,
                             # system_instructions=SYSTEM_INSTRUCTION # Removed as it caused a warning
@@ -208,7 +208,7 @@ def run_app():
                      else:
                          try:
                              llm = GoogleGenerativeAI(
-                                model="gemini-1.5-flash-latest",
+                                model="gemini-1.5-flash",
                                 temperature=0.3,
                                 google_api_key=GOOGLE_API_KEY,
                                 # system_instructions=SYSTEM_INSTRUCTION # Removed as it caused a warning
@@ -226,7 +226,7 @@ def run_app():
                 else:
                     try:
                         llm = GoogleGenerativeAI(
-                            model="gemini-1.5-flash-latest",
+                            model="gemini-1.5-flash",
                             temperature=0.3,
                             google_api_key=GOOGLE_API_KEY,
                             # system_instructions=SYSTEM_INSTRUCTION # Removed as it caused a warning
